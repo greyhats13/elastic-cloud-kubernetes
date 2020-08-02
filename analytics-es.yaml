@@ -1,0 +1,87 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: analytics
+  namespace: analytics
+spec:
+  nodeSets:
+    - config:
+        node.data: true
+        node.ingest: true
+        node.master: true
+        node.ml: true
+        #xpack.monitoring.enabled: true
+        #xpack.monitoring.enabled: true
+        xpack.monitoring.collection.enabled: true
+        #preloading data into the file system cache
+        index.store.preload: ["nvd", "dvd"]
+        #disable Swapping
+        #bootstrap.memory_lock: true
+        # thread_pool.snapshot.max: 8
+        thread_pool.write.queue_size: 2000
+        indices.memory.index_buffer_size: 30%
+        #indices.store.throttle.max_bytes_per_sec : 200mb
+        # indices.store.throttle.type" : merge 
+      count: 2
+      name: blast-node
+      podTemplate:
+        metadata: {}
+        spec:
+          containers:
+          - name: elasticsearch
+            resources:
+              limits:
+                memory: 2Gi
+                cpu: 500m
+              requests:
+                memory: 2Gi
+                cpu: 200m
+            env:
+              - name: ES_JAVA_OPTS
+                value: "-Xms1g -Xmx1g"
+          initContainers:
+            - name: sysctl
+              command:
+                - sh
+                - '-c'
+                - |
+                  sysctl -w vm.max_map_count=262144
+                  swapoff -a
+              securityContext:
+                privileged: true
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 10Gi
+            storageClassName: do-block-storage
+  version: 7.8.0
+# ---
+# apiVersion: extensions/v1beta1
+# kind: Ingress
+# metadata:
+#   annotations:
+#     cert-manager.io/cluster-issuer: letsencrypt-sit
+#     kubernetes.io/ingress.class: nginx
+#     kubernetes.io/tls-acme: "true"
+#     ## resolve 502 BadGateway when using XPACK
+#     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+#   name: analytics-es
+#   namespace: analytics
+# spec:
+#   rules:
+#   - host: es.blast.co.id
+#     http:
+#       paths:
+#       - backend:
+#           serviceName: analytics-es-http
+#           servicePort: 9200
+#         path: /
+#   tls:
+#   - hosts:
+#     - es.blast.co.id
+#     secretName: nginx-tls
